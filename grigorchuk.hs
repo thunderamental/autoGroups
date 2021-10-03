@@ -1,7 +1,10 @@
+module Grigorchuk where
+
 import Data.List
 import Data.List.Split
 
--- uses Data.List.Split for splitOn. in terminal, run: cabal install --lib split
+-- uses Data.List.Split for splitOn. 
+-- before loading in GHCI, in terminal, run: cabal install --lib split
 
 -- reduces a word in bcd to a symbol in bcd.
 subreduction :: [Char] -> [Char]
@@ -93,3 +96,22 @@ grigorWord w
     | (count 'a' r) `mod` 2 == 1 = False
     | otherwise = (grigorWord $ reduce $ zero r) && (grigorWord $ reduce $ one r)
     where r = reduce w
+
+{-
+it might be enlightening to ONLY see this as a word group for now.
+instead of its 'true' realisation as automorphisms of the binary tree.
+So the 'operation' is concatenation. Inverses are easy!-- abcde are involutions.
+
+-}
+
+invert :: [Char] -> [Char]
+invert xs = reverse xs -- for completeness.
+
+-- symbolic conjugation
+wordconjugate :: [Char] -> [Char] -> [Char]
+wordconjugate x y = reverse y ++ x ++ y
+
+-- elemental conjugation
+conjugate :: [Char] -> [Char] -> [Char]
+conjugate y x = reduce $ reverse y ++ x ++ y -- Was conjugating in wrong order previously.
+
