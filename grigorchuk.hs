@@ -101,7 +101,6 @@ grigorWord w
 it might be enlightening to ONLY see this as a word group for now.
 instead of its 'true' realisation as automorphisms of the binary tree.
 So the 'operation' is concatenation. Inverses are easy!-- abcde are involutions.
-
 -}
 
 invert :: [Char] -> [Char]
