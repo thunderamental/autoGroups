@@ -8,6 +8,7 @@ We can define elements of the F_n groups as integer lists.
 
 import Data.Maybe
 import Data.List
+import Debug.Trace
 
 data Ind = Plus | Minus | Neutral deriving (Eq, Show)
 type Elt = (Ind, Int) -- generator, not word. treat [Elt] as word.
@@ -76,10 +77,10 @@ naiveNorm xs = if normalStep xs == xs
                   else naiveNorm $ normalStep xs
 
 -- recursively calculate seminorm of an element
-seminorm :: [Elt] -> [Elt]
-seminorm []  = []
-seminorm [x] = [x]
-seminorm xs  = merge (seminorm firstHalf) (seminorm secndHalf)
+seminorm :: Int -> [Elt] -> [Elt]
+seminorm _ []  = []
+seminorm _ [x] = [x]
+seminorm p xs  = merge p (seminorm p firstHalf) (seminorm p secndHalf)
     where splitted  = splitAt (((length xs) + 1) `div` 2) xs
           firstHalf = fst splitted
           secndHalf = snd splitted 
@@ -109,68 +110,71 @@ affected by shifts, only the higher index.
 
 the final case is where we complete the product and the e_i is mapped across
 as a parametric adjustment. 
+
+The additional Int parameter is the p in F_p+1 
 -}
-mergeNP :: [Elt] -> [Elt] -> Int -> Int -> [Elt]
-mergeNP [] pw _ e2 = map (\(s,v) -> (s,v+e2)) pw -- was not clarified in paper
-mergeNP nw [] e1 _ = map (\(s,v) -> (s,v+e1)) nw
-mergeNP nw pw e1 e2
-  | (snd j1) + e1 == (snd i1) + e2 = mergeNP (ipop nw) (tail pw) e1 e2
-  | (snd j1) + e1 <  (snd i1) + e2 = (mergeNP (ipop nw) pw e1 (e2+1)) 
+mergeNP :: Int -> [Elt] -> [Elt] -> Int -> Int -> [Elt]
+mergeNP _ [] pw _ e2 = map (\(s,v) -> (s,v+e2)) pw -- was not clarified in paper
+mergeNP _ nw [] e1 _ = map (\(s,v) -> (s,v+e1)) nw
+mergeNP p nw pw e1 e2
+  | (snd j1) + e1 == (snd i1) + e2 = mergeNP p (ipop nw) (tail pw) e1 e2
+  | (snd j1) + e1 <  (snd i1) + e2 = (mergeNP p (ipop nw) pw e1 (e2+p)) 
                                           <> [(Minus, (snd j1) + e1)]
   | (snd j1) + e1 >  (snd i1) + e2 = [(Plus, (snd i1) + e2)] <>
-                                          (mergeNP nw (tail pw) (e1+1) e2)
+                                          (mergeNP p nw (tail pw) (e1+p) e2)
   where j1 = last nw
         i1 = head pw
-mergeNP _ _ _ _ = error "Input problematic??"
+mergeNP _ _ _ _ _ = error "Input problematic??"
 
 -- double positive merge (to right side)
 -- only increment e1 when we move something from the right word to the front
-mergePP :: [Elt] -> [Elt] -> Int -> Int -> [Elt]
-mergePP [] pw _ e2 = map (\(s,v) -> (s,v+e2)) pw -- but e2 is always zero. (can remove e2 completely in theory)
-mergePP nw [] e1 _ = map (\(s,v) -> (s,v+e1)) nw
-mergePP nw pw e1 e2
+mergePP :: Int -> [Elt] -> [Elt] -> Int -> Int -> [Elt]
+mergePP _ [] pw _ e2 = map (\(s,v) -> (s,v+e2)) pw -- but e2 is always zero. (can remove e2 completely in theory)
+mergePP _ nw [] e1 _ = map (\(s,v) -> (s,v+e1)) nw
+mergePP p nw pw e1 e2
   | (snd j1) + e1 <= (snd i1) + e2 = [(Plus, (snd j1) + e1)] <>
-                                          (mergePP (tail nw) pw e1 e2)
+                                          (mergePP p (tail nw) pw e1 e2)
   | (snd j1) + e1 > (snd i1) + e2  = [(Plus, (snd i1) + e2)] <>
-                                          (mergePP nw (tail pw) (e1+1) e2)
+                                          (mergePP p nw (tail pw) (e1+p) e2)
   where j1 = head nw
         i1 = head pw
-mergePP _ _ _ _ = error "Input problematic??"
+mergePP _ _ _ _ _ = error "Input problematic??"
 
 -- double negative merge, to left side, without indexing
 -- only increment e1 when we move something from the left word to the back
 -- consider using reverse $ mergePP
-mergeNN :: [Elt] -> [Elt] -> Int -> Int -> [Elt]
-mergeNN [] pw _ e2 = map (\(s,v) -> (s,v+e2)) pw 
-mergeNN nw [] e1 _ = map (\(s,v) -> (s,v+e1)) nw -- but e1 is always zero. (can remove e1 completely in theory)
-mergeNN nw pw e1 e2
-  | (snd j1) + e1 < (snd i1) + e2  = (mergeNN (ipop nw) pw e1 (e2+1)) 
+mergeNN :: Int -> [Elt] -> [Elt] -> Int -> Int -> [Elt]
+mergeNN _ [] pw _ e2 = map (\(s,v) -> (s,v+e2)) pw 
+mergeNN _ nw [] e1 _ = map (\(s,v) -> (s,v+e1)) nw -- but e1 is always zero. (can remove e1 completely in theory)
+mergeNN p nw pw e1 e2
+  | (snd j1) + e1 < (snd i1) + e2  = (mergeNN p (ipop nw) pw e1 (e2+p)) 
                                       <> [(Minus, (snd j1) + e1)]
-  | (snd j1) + e1 >= (snd i1) + e2 = (mergeNN nw (ipop pw) e1 e2) 
+  | (snd j1) + e1 >= (snd i1) + e2 = (mergeNN p nw (ipop pw) e1 e2) 
                                       <> [(Minus, (snd i1) + e2)]
   where j1 = last nw
         i1 = last pw
-mergeNN _ _ _ _ = error "mergeNN error"
+mergeNN _ _ _ _ _ = error "mergeNN error"
 
 -- merging two seminormal form elements
-merge :: [Elt] -> [Elt] -> [Elt]
-merge xs ys = w2 ++ w3
+merge :: Int -> [Elt] -> [Elt] -> [Elt]
+merge p xs ys = w2 ++ w3
   where (xp, xn) = divE xs
         (yp, yn) = divE ys
-        (wp, wn) = divE (mergeNP xn yp 0 0)
-        w2 = mergePP xp wp 0 0
-        w3 = mergeNN wn yn 0 0
+        (wp, wn) = divE (mergeNP p xn yp 0 0)
+        w2 = mergePP p xp wp 0 0
+        w3 = mergeNN p wn yn 0 0
+
 
 -- input is strictly seminormal.
-normalise :: [Elt] -> [Elt]
-normalise x = k1 ++ k2
+normalise :: Int -> [Elt] -> [Elt]
+normalise p x =  k1 ++ k2
   where (u1, u2) = divE x
-        xs = (NormState u1 u2 0 0 [] [] [] [])
-        (NormState k1 k2 d1 d2 s1 s2 w1 w2) = rebuild $ deleteB xs
+        xs = (NormState p u1 u2 0 0 [] [] [] [])
+        (NormState p1 k1 k2 d1 d2 s1 s2 w1 w2) = rebuild $ deleteB xs
 
 
 type Stack = [Int]
-data NormState = NormState [Elt] [Elt] Int Int Stack Stack [Elt] [Elt] deriving Show
+data NormState = NormState Int [Elt] [Elt] Int Int Stack Stack [Elt] [Elt] deriving Show
 -- k u1 u2 d1 d2 s1 s2 w1 w2
 -- k is the p in F_p generalised group.
 -- u_i are the positive and negative words in order.
@@ -179,25 +183,25 @@ data NormState = NormState [Elt] [Elt] Int Int Stack Stack [Elt] [Elt] deriving 
 -- w_i are the partial final output words (return w_1 w_2
 
 deletecon1 :: NormState -> Bool
-deletecon1 (NormState u1 u2 d1 d2 s1 s2 w1 w2)
+deletecon1 (NormState p u1 u2 d1 d2 s1 s2 w1 w2)
   = (u1 /= []) && (u2 == [] || i_s > j_t)
   where i_s = snd $ last u1
         j_t = snd $ head u2
 
 deletecon2 :: NormState -> Bool
-deletecon2 (NormState u1 u2 d1 d2 s1 s2 w1 w2)
+deletecon2 (NormState p u1 u2 d1 d2 s1 s2 w1 w2)
   = (u2 /= []) && (u1 == [] || i_s < j_t)
   where i_s = snd $ last u1
         j_t = snd $ head u2
 
 -- "adjacent"
 deletecon3 :: NormState -> Bool
-deletecon3 (NormState u1 u2 d1 d2 s1 s2 w1 w2)
+deletecon3 (NormState p u1 u2 d1 d2 s1 s2 w1 w2)
   = (u1 /= []) && (u2 /= []) && (i_s == j_t)
         -- the last elt of u1 and first elt of u2 is the same!
-      && (((w1 /= []) && (s1 /= []) && not ((i_s <= a_e1) && (a_e1 <= i_s + 1))) || (w1 == []) || (s1 == []))
+      && (((w1 /= []) && (s1 /= []) && not ((i_s <= a_e1) && (a_e1 <= i_s + p))) || (w1 == []) || (s1 == []))
         -- if a-e1 is defined, it is not in [i_s..i_s+p]. if it's not defined, that's ok. (implies)
-      && (((w2 /= []) && (s2 /= []) && not ((j_t <= b_e2) && (b_e2 <= j_t + 1))) || (w2 == []) || (s2 == []))
+      && (((w2 /= []) && (s2 /= []) && not ((j_t <= b_e2) && (b_e2 <= j_t + p))) || (w2 == []) || (s2 == []))
         -- if b-e2 is defined, it is not in [j_t..j_t+p]. if it's not defined, that's ok. (implies)
   where i_s = snd $ last u1
         j_t = snd $ head u2
@@ -210,12 +214,12 @@ deletecon3 (NormState u1 u2 d1 d2 s1 s2 w1 w2)
 
 -- "otherwise"
 deletecon4 :: NormState -> Bool
-deletecon4 (NormState u1 u2 d1 d2 s1 s2 w1 w2)
+deletecon4 (NormState p u1 u2 d1 d2 s1 s2 w1 w2)
   = (u1 /= []) && (u2 /= []) && (i_s == j_t)
         -- the last elt of u1 and first elt of u2 is the same!
-      && ((w1 /= []) && (s1 /= []) && (i_s <= a_e1) && (a_e1 <= i_s + 1)) 
+      && ((w1 /= []) && (s1 /= []) && (i_s <= a_e1) && (a_e1 <= i_s + p)) 
         -- if a-e1 is defined, it is in [i_s..i_s+p]
-      && ((w2 /= []) && (s2 /= []) && (j_t <= b_e2) && (b_e2 <= j_t + 1)) 
+      && ((w2 /= []) && (s2 /= []) && (j_t <= b_e2) && (b_e2 <= j_t + p)) 
         -- if b-e2 is defined, it is in [j_t..j_t+p]
   where i_s = snd $ last u1
         j_t = snd $ head u2
@@ -228,37 +232,37 @@ deletecon4 (NormState u1 u2 d1 d2 s1 s2 w1 w2)
 
 deleteB :: NormState -> NormState
 -- if either is empty, we are done.
-deleteB n@(NormState [] u2 d1 d2 s1 s2 w1 w2) = n
-deleteB n@(NormState u1 [] d1 d2 s1 s2 w1 w2) = n
-deleteB n@(NormState u1 u2 d1 d2 s1 s2 w1 w2)
+deleteB n@(NormState p [] u2 d1 d2 s1 s2 w1 w2) = n
+deleteB n@(NormState p u1 [] d1 d2 s1 s2 w1 w2) = n
+deleteB n@(NormState p u1 u2 d1 d2 s1 s2 w1 w2)
   | deletecon1 n
-      = deleteB (NormState (ipop u1) u2 d1 d2 (0:s1) s2 ((Plus, i_s):w1) w2)
+      = deleteB (NormState p (ipop u1) u2 d1 d2 (0:s1) s2 ((Plus, i_s):w1) w2)
   | deletecon2 n
-      = deleteB (NormState u1 (til u2) d1 d2 s1 (0:s2) w1 (w2 ++ [(Minus, j_t)]))
+      = deleteB (NormState p u1 (til u2) d1 d2 s1 (0:s2) w1 (w2 ++ [(Minus, j_t)]))
   | deletecon3 n
-      = deleteB (NormState (ipop u1) (til u2) d1 d2 (s1n) (s2n) w1 w2)
-  | otherwise -- deletecon4 n
-      = deleteB (NormState (ipop u1) (til u2) d1 d2 (0:s1) (0:s2) ((Plus, i_s):w1) (w2 ++ [(Minus, j_t)]))
+      = deleteB (NormState p (ipop u1) (til u2) d1 d2 (s1n) (s2n) w1 w2)
+  | otherwise 
+      = deleteB (NormState p (ipop u1) (til u2) d1 d2 (0:s1) (0:s2) ((Plus, i_s):w1) (w2 ++ [(Minus, j_t)]))
   where i_s = snd $ last u1
         j_t = snd $ head u2
-        (s1n, s2n) = (incHead s1, incHead s2)
+        (s1n, s2n) = (incHead p s1, incHead p s2)
 
 -- increment head (by p = 1) if nonempty.
-incHead :: [Int] -> [Int]
-incHead [] = []
-incHead (x:xs) = (x+1):xs
+incHead :: Int -> [Int] -> [Int]
+incHead _ [] = []
+incHead p (x:xs) = (x+p):xs
 
 rebuild :: NormState -> NormState
-rebuild (NormState u1 u2 d1 d2 (c:s1s) s2 (i1:w1s) w2)
-  = rebuild (NormState (u1 ++ [u]) u2 (nd) d2 (s1s) s2 (w1s) w2)
+rebuild (NormState p u1 u2 d1 d2 (c:s1s) s2 (i1:w1s) w2)
+  = rebuild (NormState p (u1 ++ [u]) u2 (nd) d2 (s1s) s2 (w1s) w2)
   where nd = d1 + c
         u  = (Plus, (snd i1) - nd)
-rebuild (NormState u1 u2 d1 d2 s1 (c:s2s) [] w2@(_:_))
-  = rebuild (NormState u1 (u:u2) d1 (nd) s1 s2s [] (init w2))
+rebuild (NormState p u1 u2 d1 d2 s1 (c:s2s) [] w2@(_:_))
+  = rebuild (NormState p u1 (u:u2) d1 (nd) s1 s2s [] (init w2))
   where j1 = last w2
         nd = d2 + c
         u  = (Minus, (snd j1) - nd) 
-rebuild n@(NormState u1 u2 d1 d2 s1 s2 [] []) = n
+rebuild n@(NormState p u1 u2 d1 d2 s1 s2 [] []) = n
 rebuild n = error $ show n
 
 til :: [a] -> [a]
@@ -266,14 +270,14 @@ til [] = []
 til xs = tail xs
 
 -- conditional
-unadjacent s (NormState u1 u2 d1 d2 s1 s2 w1 w2)
+unadjacent s (NormState p u1 u2 d1 d2 s1 s2 w1 w2)
   = (a == Nothing || e1 == Nothing 
-      || ((snd $ fromJust a) - (fromJust e1)) == s 
-      || ((snd $ fromJust a) - (fromJust e1)) == (s+1) )
+      || (((snd $ fromJust a) - (fromJust e1)) >= s 
+         && ((snd $ fromJust a) - (fromJust e1)) <= (s+p) ))
     ||
     (b == Nothing || e2 == Nothing 
-      || (snd (fromJust b) - fromJust e2) == s 
-      || (snd (fromJust b) - fromJust e2) == (s+1) )
+      || ((snd (fromJust b) - fromJust e2) >= s 
+         && (snd (fromJust b) - fromJust e2) <= (s+p) ))
   where a = mhead w1
         b = mlast w2
         e1 = mhead s1
@@ -289,15 +293,18 @@ mlast xs = Just (last xs)
 
 main :: IO ()
 main = do
+  print "Input F_p+1 group (provide p)"
+  number <- getLine
+  let p = (read number :: Int)
   print "Input elemental word"
   strInput <- getLine
   print "elemental word:"
   let elemWord = stringConvert $ strInput
   print elemWord
-  let parsedInputSeminorm = seminorm $ elemWord
+  let parsedInputSeminorm = seminorm p elemWord
   print "seminormal form:"
   print parsedInputSeminorm
-  let parsedInputNorm = normalise parsedInputSeminorm
+  let parsedInputNorm = normalise p parsedInputSeminorm
   print "reduced normal form:"
   print parsedInputNorm
   
